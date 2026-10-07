@@ -1,10 +1,10 @@
-torch>=2.11,<2.12
+torch>=2.14,<2.15
 torchaudio>=2.11,<2.12
-torchcodec>=0.11,<0.18
+torchcodec>=0.17,<0.18
 torchtune==0.4.0
 torchao==0.9.0
 lightning==2.4.0
-moshi==0.2.13+torch211
+moshi==0.2.13+torch214
 huggingface_hub==0.28.1
 g2p-en==2.1.0
 librosa==0.11.0
