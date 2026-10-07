@@ -46,6 +46,7 @@ class Model(nn.Module):
             SinkAttentionConfig(audio_window_size=config.audio_window_size)
         )
         self._dep_former_init = self._dep_former
+        self._depth_graph = None  # Opt-in fixed-count XPU graph, installed by the server.
 
         self.phone_former, phone_former_dim = prepare_transformer(
             MODEL_POOL[config.phone_former]
@@ -252,6 +253,31 @@ class Model(nn.Module):
             codebook_size=self.config.audio_vocab_size + self.config.audio_pad_size,
         )
 
+        # Depth transfomer caches must be reset every frame.
+        self.dep_former.reset_caches()
+        if self._depth_graph is not None:
+            # The caller retains the previous frame's semantic token for Mimi's
+            # one-frame audio delay. Replay reuses its output storage, so each
+            # frame needs its own buffer before the next replay overwrites it.
+            frame = self._depth_graph(last_h, c0_sample, spk_embeddings).clone()
+        else:
+            frame = self._generate_depth_tokens(
+                last_h, c0_sample, spk_embeddings, config
+            )
+
+        if input_pos.shape[1] == 1:
+            self.sink_attention.append_step(phone_emb, audio_tokens)
+
+        return frame, pred_shift, cur_spk_rate_cnt
+
+    def _generate_depth_tokens(
+        self,
+        last_h: torch.Tensor,
+        c0_sample: torch.Tensor,
+        spk_embeddings: torch.Tensor,
+        config: SpeechGeneratorConfig,
+    ) -> torch.Tensor:
+        """Fixed-count acoustic depth recurrence; caches are reset by the caller."""
         c0_embed = self._embed_audio(0, c0_sample)
         c0_embed = c0_embed.repeat(last_h.shape[0], 1, 1)
 
@@ -266,8 +292,6 @@ class Model(nn.Module):
             .repeat(curr_h.size(0), 1)
         )
 
-        # Depth transfomer caches must be reset every frame.
-        self.dep_former.reset_caches()
         for i in range(1, self.config.num_codebooks):
             curr_dep_former_mask = index_causal_mask(
                 self.dep_former_causal_mask, curr_pos
@@ -276,11 +300,11 @@ class Model(nn.Module):
             if curr_h.size(1) == 1:
                 dep_former_h = self._dep_former(
                     curr_h, curr_pos, curr_dep_former_mask
-                ).to(dtype=dtype)
+                ).to(dtype=last_h.dtype)
             else:
                 dep_former_h = self._dep_former_init(
                     curr_h, curr_pos, curr_dep_former_mask
-                ).to(dtype=dtype)
+                ).to(dtype=last_h.dtype)
 
             ci_logits = torch.mm(dep_former_h[:, -1, :], self.audio_head[i - 1])
             ci_sample = sample_acoustic_token(
@@ -295,10 +319,7 @@ class Model(nn.Module):
             frame = torch.cat([frame, ci_sample], dim=1)
             curr_pos = curr_pos[:, -1:] + 1
 
-        if input_pos.shape[1] == 1:
-            self.sink_attention.append_step(phone_emb, audio_tokens)
-
-        return frame, pred_shift, cur_spk_rate_cnt
+        return frame
 
     def _temp_former(
         self,
