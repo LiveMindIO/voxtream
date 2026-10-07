@@ -34,6 +34,7 @@ classifiers = [
 dependencies = [
   "torch>=2.9,<2.10",
   "torchaudio>=2.9,<2.10",
+  "torchcodec>=0.9,<0.10",
   "torchtune==0.4.0",
   "torchao==0.9.0",
   "moshi>=0.2.13",
