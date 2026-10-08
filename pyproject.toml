@@ -51,12 +51,12 @@ dependencies = [
   "pydantic==2.10.6",
   "setuptools>=70,<81",
   "silero-vad==6.2.0",
-  "jiwer==4.0.0",
-  "openai-whisper==20250625"
+  "jiwer==4.0.0"
 ]
 
 [project.optional-dependencies]
-dev = ["black", "isort", "flake8", "mypy", "pytest"]
+asr = ["openai-whisper==20250625"]
+dev = ["black", "isort", "flake8", "mypy", "pytest", "openai-whisper==20250625"]
 
 [project.urls]
 Homepage = "https://herimor.github.io/voxtream2"
